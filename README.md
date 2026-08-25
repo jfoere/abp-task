@@ -1,5 +1,7 @@
 # Conference Rooms API
 
+Repository: [github.com/jfoere/abp-task](https://github.com/jfoere/abp-task)
+
 An ASP.NET Core Web API for managing conference rooms, searching availability, creating bookings with time-based pricing, and viewing business reports.
 
 The original assignment is available in [task.md](task.md), and the agreed implementation decisions are recorded in [PLAN.md](PLAN.md).
