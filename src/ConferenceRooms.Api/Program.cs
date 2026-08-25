@@ -129,6 +129,10 @@ builder.Services.Configure<ForwardedHeadersOptions>(options =>
     options.KnownProxies.Clear();
 });
 
+var swaggerApiKeyDescription = BuildSwaggerApiKeyDescription(
+    builder.Environment,
+    builder.Configuration);
+
 builder.Services.AddEndpointsApiExplorer();
 builder.Services.AddSwaggerGen(options =>
 {
@@ -144,9 +148,10 @@ builder.Services.AddSwaggerGen(options =>
         Type = SecuritySchemeType.ApiKey,
         In = ParameterLocation.Header,
         Name = ApiKeyDefaults.HeaderName,
-        Description = "Enter an Admin or Customer API key."
+        Description = swaggerApiKeyDescription
     });
     options.OperationFilter<AuthorizeOperationFilter>();
+    options.OperationFilter<AvailabilityExampleOperationFilter>();
 
     var xmlFile = $"{typeof(Program).Assembly.GetName().Name}.xml";
     options.IncludeXmlComments(Path.Combine(AppContext.BaseDirectory, xmlFile));
@@ -172,6 +177,37 @@ app.Run();
 
 static string GetClientAddress(HttpContext context) =>
     context.Connection.RemoteIpAddress?.ToString() ?? "unknown";
+
+static string BuildSwaggerApiKeyDescription(
+    IHostEnvironment environment,
+    IConfiguration configuration)
+{
+    const string defaultDescription = "Enter an Admin or Customer API key.";
+    if (!environment.IsDevelopment())
+    {
+        return defaultDescription;
+    }
+
+    var clients = configuration
+        .GetSection(ApiKeyOptions.SectionName)
+        .Get<ApiKeyOptions>()?
+        .Clients
+        .Where(client => !string.IsNullOrWhiteSpace(client.Key))
+        .ToList() ?? [];
+
+    if (clients.Count == 0)
+    {
+        return defaultDescription;
+    }
+
+    var credentials = string.Join(
+        "\n\n",
+        clients.Select(client =>
+            $"**{client.Name}** ({client.Role})\n\n```\n{client.Key}\n```"));
+
+    return $"Copy one local Development key, click **Authorize**, and paste it below. "
+        + $"Never use these keys in Production.\n\n{credentials}";
+}
 
 static string GetDataProtectionPath(string contentRootPath)
 {

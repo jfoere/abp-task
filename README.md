@@ -39,15 +39,7 @@ tests/
 
 The production code uses one project to keep this small assignment easy to open, run, and explain. Folders still separate responsibilities: `Business` contains business behavior and repository contracts, `Data` implements database access, and the controllers turn HTTP requests into business operations. These are organizational boundaries rather than separate compiled assemblies.
 
-### EF Core in this project
-
-EF Core maps the C# domain entities to SQLite tables:
-
-- `ConferenceRoomsDbContext` is the database session.
-- Entity configurations define tables, keys, relationships, indexes, and the active-room query filter.
-- A migration describes how to create or update the schema.
-- Repositories contain database queries so business services do not depend on EF Core.
-- `Database.MigrateAsync()` applies only pending migrations; it does not recreate or clear an existing database.
+EF Core maps the domain entities to SQLite tables. Database queries stay in repositories, and `Database.MigrateAsync()` applies pending schema migrations without clearing existing data.
 
 ## Business Rules
 
@@ -98,42 +90,16 @@ dotnet tool restore
 dotnet restore
 ```
 
-Generate four random API keys:
-
-```powershell
-function New-ConferenceRoomsApiKey {
-    $keyBytes = New-Object byte[] 32
-    $generator = [Security.Cryptography.RandomNumberGenerator]::Create()
-    $generator.GetBytes($keyBytes)
-    $generator.Dispose()
-    [Convert]::ToBase64String($keyBytes)
-}
-
-$adminKey1 = New-ConferenceRoomsApiKey
-$adminKey2 = New-ConferenceRoomsApiKey
-$customerKey1 = New-ConferenceRoomsApiKey
-$customerKey2 = New-ConferenceRoomsApiKey
-```
-
-Store them outside the repository with .NET user secrets:
-
-```powershell
-$apiProject = ".\src\ConferenceRooms.Api\ConferenceRooms.Api.csproj"
-dotnet user-secrets set --project $apiProject "ApiKeys:Clients:0:Key" $adminKey1
-dotnet user-secrets set --project $apiProject "ApiKeys:Clients:1:Key" $adminKey2
-dotnet user-secrets set --project $apiProject "ApiKeys:Clients:2:Key" $customerKey1
-dotnet user-secrets set --project $apiProject "ApiKeys:Clients:3:Key" $customerKey2
-```
-
 Start the API:
 
 ```powershell
 dotnet run --project .\src\ConferenceRooms.Api\ConferenceRooms.Api.csproj --launch-profile https
 ```
 
-Open [https://localhost:7100/swagger](https://localhost:7100/swagger). Use Swagger's **Authorize** button and enter one of the generated key values.
+Open [https://localhost:7100/swagger](https://localhost:7100/swagger). The **Authorize** dialog displays two Admin and two Customer credentials that are ready for local testing.
 
 The local SQLite database is created at `src/ConferenceRooms.Api/App_Data/conference-rooms.db`. `App_Data` and database files are ignored by Git.
+The fixed Development credentials and SQLite setup are intended for local/demo use only.
 
 ## API
 
@@ -161,14 +127,10 @@ See [ConferenceRooms.Api.http](src/ConferenceRooms.Api/ConferenceRooms.Api.http)
 ## Errors and Security
 
 - Validation, missing resources, conflicts, and unexpected errors use RFC 7807 Problem Details.
-- API keys are SHA-256 hashed before constant-time comparison.
-- Configured keys must be unique and at least 32 characters long.
-- Production startup requires at least one Admin key and one Customer key.
-- Public endpoints allow 60 requests per minute per IP.
-- Protected endpoints allow 30 requests per minute per authenticated key.
-- Missing or invalid keys on protected endpoints allow 10 attempts per minute per IP.
+- API keys are unique, at least 32 characters long, and compared using SHA-256 hashes in constant time.
+- Production requires separately configured Admin and Customer keys; only local Development credentials appear in Swagger.
+- Rate limits are 60 requests per minute for public endpoints, 30 per authenticated key, and 10 per IP for failed authentication attempts.
 - Exceeded limits return `429 Too Many Requests` with `Retry-After: 60`.
-- Key values are never included in source control or Swagger.
 
 ## Database Migrations
 
@@ -192,47 +154,3 @@ dotnet test
 ```
 
 The integration tests use isolated temporary SQLite databases rather than the EF Core in-memory provider, so SQLite mappings and queries are exercised.
-
-## Manual Azure App Service Deployment
-
-This project intentionally uses a demo-only SQLite deployment. Create a Windows Azure App Service configured for code deployment with the .NET 8 runtime, keep it at one instance, and do not enable autoscaling.
-
-In the App Service **Environment variables** page, set four secret values:
-
-```text
-ApiKeys__Clients__0__Key = <admin-1-key>
-ApiKeys__Clients__1__Key = <admin-2-key>
-ApiKeys__Clients__2__Key = <customer-1-key>
-ApiKeys__Clients__3__Key = <customer-2-key>
-```
-
-Publish and create a ZIP from the contents of the publish directory:
-
-```powershell
-dotnet publish .\src\ConferenceRooms.Api\ConferenceRooms.Api.csproj `
-  --configuration Release `
-  --output .\publish
-
-Compress-Archive -Path .\publish\* -DestinationPath .\conference-rooms.zip
-```
-
-Deploy the ZIP manually with Azure CLI:
-
-```powershell
-az login
-az webapp deploy `
-  --resource-group <resource-group> `
-  --name <app-name> `
-  --src-path .\conference-rooms.zip `
-  --type zip
-```
-
-Verify:
-
-```text
-https://<app-name>.azurewebsites.net/swagger
-```
-
-In Azure, the application stores SQLite and data-protection files under `%HOME%\data`, outside `site\wwwroot`. They survive normal restarts and ZIP deployments. Deleting the App Service or its files, storage failure, or SQLite locking problems can still cause data loss.
-
-SQLite on App Service persistent storage is an accepted single-instance demo compromise, not the recommended production architecture. A real production deployment should switch the data provider to Azure SQL or another client/server database.

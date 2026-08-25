@@ -1,5 +1,6 @@
 using System.Net;
 using System.Net.Http.Json;
+using System.Text.Json;
 using ConferenceRooms.Business.Contracts;
 using ConferenceRooms.Tests.TestSupport;
 
@@ -18,9 +19,25 @@ public sealed class ApiIntegrationTests(ConferenceRoomsApiFactory factory)
         using var client = factory.CreateClient();
 
         var swagger = await client.GetAsync("/swagger/v1/swagger.json");
+        var swaggerDocument = await swagger.Content.ReadAsStringAsync();
+        using var openApiDocument = JsonDocument.Parse(swaggerDocument);
+        var availabilityParameters = openApiDocument.RootElement
+            .GetProperty("paths")
+            .GetProperty("/api/rooms/available")
+            .GetProperty("get")
+            .GetProperty("parameters")
+            .EnumerateArray()
+            .ToDictionary(parameter => parameter.GetProperty("name").GetString()!);
         var rooms = await client.GetFromJsonAsync<List<RoomResponse>>("/api/rooms");
 
         Assert.Equal(HttpStatusCode.OK, swagger.StatusCode);
+        Assert.DoesNotContain(ConferenceRoomsApiFactory.AdminKey, swaggerDocument);
+        Assert.DoesNotContain(ConferenceRoomsApiFactory.CustomerKey, swaggerDocument);
+        Assert.Equal(
+            "2027-09-01T10:00:00+03:00",
+            availabilityParameters["startTime"].GetProperty("example").GetString());
+        Assert.Equal(4, availabilityParameters["durationHours"].GetProperty("example").GetInt32());
+        Assert.Equal(50, availabilityParameters["capacity"].GetProperty("example").GetInt32());
         Assert.NotNull(rooms);
         Assert.True(rooms.Count >= 3);
         Assert.Contains(rooms, room => room.Id == RoomAId && room.SupportedServices.Count == 3);
