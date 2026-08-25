@@ -24,14 +24,16 @@ The implementation will stay close to the assignment. Booking cancellation, cust
 ```text
 ConferenceRooms.sln
 src/
-  ConferenceRooms.Api/             Controllers, authentication, Swagger, HTTP concerns
-  ConferenceRooms.Application/     Use cases, pricing, availability, reports, contracts
-  ConferenceRooms.Infrastructure/  EF Core, SQLite, migrations, repositories, seed data
+  ConferenceRooms.Api/             Single production project
+    Business/                      Use cases, pricing, availability, reports, contracts
+    Data/                          EF Core, SQLite, migrations, repositories, seed data
+    Controllers/                   HTTP endpoints
+    Auth/                          API-key authentication and authorization
 tests/
   ConferenceRooms.Tests/           Unit and integration tests added after implementation
 ```
 
-Dependencies point inward: `Api` and `Infrastructure` depend on `Application`; `Application` does not depend on ASP.NET Core or EF Core.
+The single production project reduces ceremony for this small assignment. Its folders retain clear responsibility boundaries: controllers depend on business services, and the data layer implements repository contracts used by those services. Because these are folders in one assembly, the separation is maintained by convention rather than project-reference rules.
 
 ## 4. Core Data Model
 
@@ -159,8 +161,8 @@ The deployed SQLite setup is explicitly a single-instance demo compromise. The R
 
 ## 11. Build Order
 
-1. Pin the .NET 8 SDK and scaffold the solution and project references.
-2. Add domain models, application contracts, shared errors, and request/response DTOs.
+1. Pin the .NET 8 SDK and scaffold the API and test projects with clear internal folders.
+2. Add domain models, business contracts, shared errors, and request/response DTOs.
 3. Add EF Core SQLite persistence, mappings, migration, and idempotent seed data.
 4. Add API-key authentication, role policies, Problem Details, rate limiting, and Swagger security configuration.
 5. Implement room CRUD and soft deletion.

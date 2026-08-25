@@ -1,0 +1,45 @@
+@baseUrl = https://localhost:7100
+@adminKey = REPLACE_WITH_ADMIN_KEY
+@customerKey = REPLACE_WITH_CUSTOMER_KEY
+@roomAId = 20000000-0000-0000-0000-000000000001
+@projectorId = 10000000-0000-0000-0000-000000000001
+@wifiId = 10000000-0000-0000-0000-000000000002
+
+### Public room catalog
+GET {{baseUrl}}/api/rooms
+
+### Public availability search
+GET {{baseUrl}}/api/rooms/available?startTime=2026-09-01T11:00:00%2B03:00&durationHours=4&capacity=40
+
+### Create a room as Admin
+POST {{baseUrl}}/api/rooms
+X-API-Key: {{adminKey}}
+Content-Type: application/json
+
+{
+  "name": "Room D",
+  "capacity": 20,
+  "baseHourlyRate": 1800,
+  "optionalServiceIds": [
+    "{{projectorId}}"
+  ]
+}
+
+### Create a booking as Customer
+POST {{baseUrl}}/api/bookings
+X-API-Key: {{customerKey}}
+Content-Type: application/json
+
+{
+  "roomId": "{{roomAId}}",
+  "startTime": "2026-09-01T11:00:00+03:00",
+  "durationHours": 4,
+  "optionalServiceIds": [
+    "{{projectorId}}",
+    "{{wifiId}}"
+  ]
+}
+
+### Revenue report as Admin
+GET {{baseUrl}}/api/reports/revenue?from=2026-09-01&to=2026-09-30
+X-API-Key: {{adminKey}}
