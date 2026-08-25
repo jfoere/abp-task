@@ -12,6 +12,7 @@ namespace ConferenceRooms.Api.Controllers;
 [Route("api/bookings")]
 [Authorize(Policy = AuthorizationPolicies.CustomerOrAdmin)]
 [EnableRateLimiting(RateLimitPolicies.Protected)]
+[Produces("application/json")]
 public sealed class BookingsController(IBookingManagementService bookings) : ControllerBase
 {
     /// <summary>Creates a booking and returns its immutable price snapshot.</summary>

@@ -6,7 +6,8 @@ namespace ConferenceRooms.Api.Errors;
 
 public sealed class GlobalExceptionHandler(
     IProblemDetailsService problemDetailsService,
-    ILogger<GlobalExceptionHandler> logger) : IExceptionHandler
+    ILogger<GlobalExceptionHandler> logger,
+    IHostEnvironment environment) : IExceptionHandler
 {
     public async ValueTask<bool> TryHandleAsync(
         HttpContext httpContext,
@@ -36,7 +37,8 @@ public sealed class GlobalExceptionHandler(
             _ => new ProblemDetails
             {
                 Status = StatusCodes.Status500InternalServerError,
-                Title = "An unexpected error occurred"
+                Title = "An unexpected error occurred",
+                Detail = environment.IsDevelopment() ? exception.Message : null
             }
         };
 
@@ -48,11 +50,25 @@ public sealed class GlobalExceptionHandler(
             logger.LogError(exception, "An unhandled exception occurred while processing {Path}.", httpContext.Request.Path);
         }
 
-        return await problemDetailsService.TryWriteAsync(new ProblemDetailsContext
+        var problemDetailsContext = new ProblemDetailsContext
         {
             HttpContext = httpContext,
             ProblemDetails = problemDetails,
             Exception = exception
-        });
+        };
+
+        if (await problemDetailsService.TryWriteAsync(problemDetailsContext))
+        {
+            return true;
+        }
+
+        await httpContext.Response.WriteAsJsonAsync(
+            problemDetails,
+            problemDetails.GetType(),
+            options: null,
+            contentType: "application/problem+json",
+            cancellationToken);
+
+        return true;
     }
 }

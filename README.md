@@ -98,6 +98,8 @@ dotnet run --project .\src\ConferenceRooms.Api\ConferenceRooms.Api.csproj --laun
 
 Open [https://localhost:7100/swagger](https://localhost:7100/swagger). The **Authorize** dialog displays two Admin and two Customer credentials that are ready for local testing.
 
+Swagger provides valid example values for every operation. The examples use seeded IDs and matching Kyiv timestamps. After creating Room D, copy its returned ID into the update or delete example; after creating a booking, change its date or time before running that example again.
+
 The local SQLite database is created at `src/ConferenceRooms.Api/App_Data/conference-rooms.db`. `App_Data` and database files are ignored by Git.
 The fixed Development credentials and SQLite setup are intended for local/demo use only.
 

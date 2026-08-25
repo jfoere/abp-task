@@ -151,7 +151,7 @@ builder.Services.AddSwaggerGen(options =>
         Description = swaggerApiKeyDescription
     });
     options.OperationFilter<AuthorizeOperationFilter>();
-    options.OperationFilter<AvailabilityExampleOperationFilter>();
+    options.OperationFilter<ApiInputExamplesOperationFilter>();
 
     var xmlFile = $"{typeof(Program).Assembly.GetName().Name}.xml";
     options.IncludeXmlComments(Path.Combine(AppContext.BaseDirectory, xmlFile));

@@ -21,23 +21,86 @@ public sealed class ApiIntegrationTests(ConferenceRoomsApiFactory factory)
         var swagger = await client.GetAsync("/swagger/v1/swagger.json");
         var swaggerDocument = await swagger.Content.ReadAsStringAsync();
         using var openApiDocument = JsonDocument.Parse(swaggerDocument);
-        var availabilityParameters = openApiDocument.RootElement
-            .GetProperty("paths")
-            .GetProperty("/api/rooms/available")
-            .GetProperty("get")
-            .GetProperty("parameters")
-            .EnumerateArray()
-            .ToDictionary(parameter => parameter.GetProperty("name").GetString()!);
+        var paths = openApiDocument.RootElement.GetProperty("paths");
+        JsonElement Operation(string path, string method) =>
+            paths.GetProperty(path).GetProperty(method);
+        JsonElement Parameter(JsonElement operation, string name) =>
+            operation.GetProperty("parameters").EnumerateArray().Single(parameter =>
+                parameter.GetProperty("name").GetString() == name);
+        JsonElement BodyExample(JsonElement operation) =>
+            operation.GetProperty("requestBody")
+                .GetProperty("content")
+                .GetProperty("application/json")
+                .GetProperty("example");
+
+        var roomList = Operation("/api/rooms", "get");
+        var roomGet = Operation("/api/rooms/{id}", "get");
+        var roomAvailability = Operation("/api/rooms/available", "get");
+        var roomCreate = Operation("/api/rooms", "post");
+        var roomUpdate = Operation("/api/rooms/{id}", "put");
+        var roomDelete = Operation("/api/rooms/{id}", "delete");
+        var bookingCreate = Operation("/api/bookings", "post");
+        var roomCreateExample = BodyExample(roomCreate);
+        var roomUpdateExample = BodyExample(roomUpdate);
+        var bookingExample = BodyExample(bookingCreate);
         var rooms = await client.GetFromJsonAsync<List<RoomResponse>>("/api/rooms");
 
         Assert.Equal(HttpStatusCode.OK, swagger.StatusCode);
         Assert.DoesNotContain(ConferenceRoomsApiFactory.AdminKey, swaggerDocument);
         Assert.DoesNotContain(ConferenceRoomsApiFactory.CustomerKey, swaggerDocument);
+        Assert.Contains("No input is required", roomList.GetProperty("description").GetString());
+        Assert.Equal(RoomAId, Parameter(roomGet, "id").GetProperty("example").GetGuid());
         Assert.Equal(
             "2027-09-01T10:00:00+03:00",
-            availabilityParameters["startTime"].GetProperty("example").GetString());
-        Assert.Equal(4, availabilityParameters["durationHours"].GetProperty("example").GetInt32());
-        Assert.Equal(50, availabilityParameters["capacity"].GetProperty("example").GetInt32());
+            Parameter(roomAvailability, "startTime").GetProperty("example").GetString());
+        Assert.Equal(2, Parameter(roomAvailability, "durationHours").GetProperty("example").GetInt32());
+        Assert.Equal(50, Parameter(roomAvailability, "capacity").GetProperty("example").GetInt32());
+        Assert.Equal("Room D", roomCreateExample.GetProperty("name").GetString());
+        Assert.Equal(20, roomCreateExample.GetProperty("capacity").GetInt32());
+        Assert.Equal("Room D Updated", roomUpdateExample.GetProperty("name").GetString());
+        Assert.Equal(
+            "30000000-0000-0000-0000-000000000001",
+            Parameter(roomUpdate, "id").GetProperty("example").GetString());
+        Assert.Equal(
+            "30000000-0000-0000-0000-000000000001",
+            Parameter(roomDelete, "id").GetProperty("example").GetString());
+        Assert.Equal(RoomAId, bookingExample.GetProperty("roomId").GetGuid());
+        Assert.Equal("2027-09-01T10:00:00+03:00", bookingExample.GetProperty("startTime").GetString());
+        Assert.Equal(2, bookingExample.GetProperty("durationHours").GetInt32());
+        Assert.Equal(ProjectorId, bookingExample.GetProperty("optionalServiceIds")[0].GetGuid());
+        foreach (var reportPath in new[]
+                 {
+                     "/api/reports/revenue",
+                     "/api/reports/utilization",
+                     "/api/reports/services"
+                 })
+        {
+            var report = Operation(reportPath, "get");
+            Assert.Equal("2027-09-01", Parameter(report, "from").GetProperty("example").GetString());
+            Assert.Equal("2027-09-01", Parameter(report, "to").GetProperty("example").GetString());
+        }
+
+        foreach (var (operation, status) in new[]
+                 {
+                     (roomList, "200"),
+                     (roomGet, "200"),
+                     (roomAvailability, "200"),
+                     (roomCreate, "201"),
+                     (roomUpdate, "200"),
+                     (bookingCreate, "201"),
+                     (Operation("/api/reports/revenue", "get"), "200"),
+                     (Operation("/api/reports/utilization", "get"), "200"),
+                     (Operation("/api/reports/services", "get"), "200")
+                 })
+        {
+            Assert.DoesNotContain(
+                operation.GetProperty("responses")
+                    .GetProperty(status)
+                    .GetProperty("content")
+                    .EnumerateObject(),
+                content => content.NameEquals("text/plain"));
+        }
+
         Assert.NotNull(rooms);
         Assert.True(rooms.Count >= 3);
         Assert.Contains(rooms, room => room.Id == RoomAId && room.SupportedServices.Count == 3);
@@ -65,6 +128,28 @@ public sealed class ApiIntegrationTests(ConferenceRoomsApiFactory factory)
         Assert.Equal(HttpStatusCode.Unauthorized, anonymousResponse.StatusCode);
         Assert.Equal(HttpStatusCode.Forbidden, customerResponse.StatusCode);
         Assert.Equal(HttpStatusCode.Created, adminResponse.StatusCode);
+    }
+
+    [Fact]
+    public async Task InvalidBooking_WithPlainTextAccept_ReturnsConsistentValidationProblem()
+    {
+        using var client = factory.CreateAdminClient();
+        client.DefaultRequestHeaders.Accept.ParseAdd("text/plain");
+
+        var response = await client.PostAsJsonAsync("/api/bookings", new
+        {
+            roomId = "3fa85f64-5717-4562-b3fc-2c963f66afa6",
+            startTime = "2026-08-25T16:17:24.647Z",
+            durationHours = 17,
+            optionalServiceIds = new[] { "3fa85f64-5717-4562-b3fc-2c963f66afa6" }
+        });
+        using var problem = JsonDocument.Parse(await response.Content.ReadAsStringAsync());
+
+        Assert.Equal(HttpStatusCode.BadRequest, response.StatusCode);
+        Assert.Equal("application/problem+json", response.Content.Headers.ContentType?.MediaType);
+        Assert.Equal(400, problem.RootElement.GetProperty("status").GetInt32());
+        Assert.Equal("Validation failed", problem.RootElement.GetProperty("title").GetString());
+        Assert.True(problem.RootElement.GetProperty("errors").TryGetProperty("startTime", out _));
     }
 
     [Fact]

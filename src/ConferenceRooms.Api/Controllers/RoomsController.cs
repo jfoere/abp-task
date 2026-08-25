@@ -10,6 +10,7 @@ namespace ConferenceRooms.Api.Controllers;
 
 [ApiController]
 [Route("api/rooms")]
+[Produces("application/json")]
 public sealed class RoomsController(IRoomManagementService rooms) : ControllerBase
 {
     /// <summary>Returns the active room catalog.</summary>

@@ -12,6 +12,7 @@ namespace ConferenceRooms.Api.Controllers;
 [Route("api/reports")]
 [Authorize(Policy = AuthorizationPolicies.Admin)]
 [EnableRateLimiting(RateLimitPolicies.Protected)]
+[Produces("application/json")]
 public sealed class ReportsController(IReportingService reports) : ControllerBase
 {
     /// <summary>Returns total revenue and revenue by room for the date range.</summary>
